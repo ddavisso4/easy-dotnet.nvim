@@ -137,7 +137,7 @@ local function populate_quickfix_from_file(filename)
   set_quickfix_list(quickfix_list)
 
   -- Open the quickfix window
-  --vim.cmd("copen")
+  vim.cmd("copen")
 end
 
 local function execute_build_quickfix_command(command, log_path)
@@ -178,7 +178,20 @@ M.build_project_quickfix = function(use_default, dotnet_args)
       return
     end
     local command = string.format("dotnet build %s /flp:v=q /flp:logfile=%s %s", csproj, logPath, dotnet_args or "")
-    execute_build_quickfix_command(command, logPath)
+    M.pending = true
+    vim.fn.jobstart(command, {
+      on_exit = function(_, b, _)
+        M.pending = false
+        if b == 0 then
+          logger.info("Built successfully")
+          vim.cmd("cclose")
+        else
+          logger.info("Build failed")
+          populate_quickfix_from_file(logPath)
+        end
+      end,
+    })
+
     return
   end
 
@@ -193,9 +206,10 @@ M.build_project_quickfix = function(use_default, dotnet_args)
         M.pending = false
         if b == 0 then
           spinner:stop_spinner("Built successfully")
+          vim.cmd("cclose")
         else
           spinner:stop_spinner("Build failed", vim.log.levels.ERROR)
-          build_log_to_buffer()
+          --build_log_to_buffer()
           populate_quickfix_from_file(logPath)
         end
       end,
